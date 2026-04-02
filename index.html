@@ -59,7 +59,7 @@ const [state,setState]=useState(saved?.state||null);
 const [base,setBase]=useState([]);
 const [type,setType]=useState("選択");
 const [dobon,setDobon]=useState([]);
-const [target,setTarget]=useState([]);
+const [target,setTarget]=useState(null);
 
 const [result,setResult]=useState([]);
 const [rank,setRank]=useState([]);
@@ -76,14 +76,14 @@ const i=state.round-1;
 setBase(state.roundBase[i]);
 setType(state.roundType[i]||"選択");
 setDobon(state.roundDobonIdx[i]||[]);
-setTarget(state.roundTargetIdx[i]||[]);
+setTarget(state.roundTargetIdx[i]??null);
 },[state?.round]);
 
 const invalidate=()=>setState(prev=>({...prev,confirmed:false}));
 
 /* ========= 同一禁止 ========= */
 const toggleDobon=(i)=>{
-if(target.includes(i))return;
+if(target===i)return;
 
 setDobon(dobon.includes(i)
 ? dobon.filter(v=>v!==i)
@@ -93,11 +93,9 @@ invalidate();
 };
 
 const toggleTarget=(i)=>{
-if(dobon.includes(i))return;
+if(dobon.includes(i)) return;
 
-setTarget(target.includes(i)
-? target.filter(v=>v!==i)
-: [...target,i]);
+setTarget(target===i ? null : i);
 
 invalidate();
 };
@@ -108,7 +106,7 @@ const i=state.round-1;
 let score=Array(state.n).fill(0);
 
 if(type==="ドボン"||type==="ドボン返し"){
-if(dobon.length===0||target.length===0)return;
+if(dobon.length===0||target===null)return;
 }
 if(type==="ウルトラドボン" && dobon.length===0)return;
 
@@ -121,14 +119,14 @@ break;
 case "ドボン":
 for(let j=0;j<state.n;j++){
 if(dobon.includes(j)) score[j]=-50;
-else if(target.includes(j)) score[j]=base[j]+50*dobon.length;
+else if(target===j) score[j]=base[j]+50*dobon.length;
 else score[j]=base[j];
 }
 break;
 
 case "ドボン返し":
 for(let j=0;j<state.n;j++){
-if(target.includes(j)) score[j]=-100*dobon.length;
+if(target===j) score[j]=-100*dobon.length;
 else if(dobon.includes(j)) score[j]=base[j]+100;
 else score[j]=base[j];
 }
@@ -191,10 +189,12 @@ confirmed:true
 };
 
 /* ========= 共有 ========= */
-const share=async ()=>{
+const sorted=[...state.scores].map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
+
 let txt="【ドボン結果】\n";
-state.names.forEach((n,i)=>{
-txt+=`${n} : ${state.scores[i]}\n`;
+
+sorted.forEach((x,i)=>{
+txt+=`${i+1}位 ${state.names[x.i]} : ${x.v}\n`;
 });
 
 if(navigator.share){
@@ -375,20 +375,23 @@ className="border p-2 w-full">
 <div className={panel}>
 <div className={title}>ドボンした人</div>
 {state.names.map((n,i)=>(
-<label key={i} className={`block ${target.includes(i)?"text-gray-400":""}`}>
+<label key={i} className={`block ${target===i?"text-gray-400":""}`}>
 <input type="checkbox"
-disabled={target.includes(i)}
+disabled={target===i}
 checked={dobon.includes(i)}
 onChange={()=>toggleDobon(i)}/> {n}
 </label>
 ))}
 
-<div className={title}>対象</div>
+<div className={title}>
+{type==="ドボン" && "ドボンされた人"}
+{type==="ドボン返し" && "ドボン返しした人"}
+</div>
 {state.names.map((n,i)=>(
 <label key={i} className={`block ${dobon.includes(i)?"text-gray-400":""}`}>
 <input type="checkbox"
 disabled={dobon.includes(i)}
-checked={target.includes(i)}
+checked={target===i}
 onChange={()=>toggleTarget(i)}/> {n}
 </label>
 ))}
@@ -416,7 +419,7 @@ onChange={()=>toggleDobon(i)}/> {n}
 const disabled =
 (type==="ウルトラドボン" && dobon.includes(i)) ||
 (type==="ドボン" && dobon.includes(i)) ||
-(type==="ドボン返し" && target.includes(i));
+(type==="ドボン返し" && target===i);
 
 return(
 <input key={i} type="number"
@@ -443,6 +446,47 @@ invalidate();
 <div className={title}>累計順位</div>
 {rank.map((r,i)=><div key={i}>{r}</div>)}
 </div>
+
+<div className={panel}>
+<div className={title}>履歴</div>
+
+<table className="w-full text-sm text-center">
+<thead>
+<tr>
+<th>R</th>
+{state.names.map((n,i)=><th key={i}>{n}</th>)}
+</tr>
+</thead>
+
+<tbody>
+{state.roundScores.map((row,ri)=>(
+<tr key={ri}>
+<td>R{ri+1}</td>
+
+{row.map((v,i)=>{
+const isHalf=state.halfFlags[ri][i];
+const isDobon=state.roundDobonIdx[ri].includes(i);
+const isTarget=state.roundTargetIdx[ri].includes(i);
+
+let color="text-black";
+if(state.roundType[ri]==="巣上がり") color="text-green-500";
+else if(isDobon) color="text-red-500";
+else if(isTarget) color="text-blue-500";
+
+return(
+<td key={i} className={color}>
+{v}{isHalf?"★":""}
+</td>
+);
+})}
+
+</tr>
+))}
+</tbody>
+</table>
+</div>
+
+
 {/* ===== 操作ボタン ===== */}
 <div className="flex gap-2 mt-2">
 
@@ -450,6 +494,8 @@ invalidate();
 className="text-xs bg-gray-300 px-2 py-1 rounded"
 onClick={()=>setPage("init")}
 >
+
+
 設定
 </button>
 
@@ -468,7 +514,9 @@ setState(prev=>({...prev,round:prev.round-1,confirmed:false}));
 
 <button
 className={`flex-1 p-2 rounded text-white ${
-state.confirmed ? "bg-gray-400" : "bg-green-500"
+(type==="選択" || state.confirmed)
+? "bg-gray-400"
+: "bg-green-500"
 }`}
 onClick={confirm}
 >
@@ -501,3 +549,4 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
+
