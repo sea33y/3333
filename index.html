@@ -22,19 +22,16 @@ function App(){
 const panel="bg-white rounded-2xl shadow p-4 mb-4";
 const title="font-bold mb-2";
 
-/* ========= localStorage ========= */
+/* ===== 保存 ===== */
 const load=()=>{
 const s=localStorage.getItem("dobon");
 return s?JSON.parse(s):null;
 };
+const save=(d)=>localStorage.setItem("dobon",JSON.stringify(d));
 
-const save=(data)=>{
-localStorage.setItem("dobon",JSON.stringify(data));
-};
-
-/* ========= 初期 ========= */
 const saved=load();
 
+/* ===== 状態 ===== */
 const [page,setPage]=useState(saved?.page||"start");
 const [n,setN]=useState(saved?.n||2);
 const [r,setR]=useState(saved?.r||5);
@@ -47,7 +44,7 @@ round:1,
 roundScores:Array(r).fill(null).map(()=>Array(n).fill(0)),
 roundType:Array(r).fill(""),
 roundDobonIdx:Array(r).fill(null).map(()=>[]),
-roundTargetIdx:Array(r).fill(null).map(()=>[]),
+roundTargetIdx:Array(r).fill(null),
 roundBase:Array(r).fill(null).map(()=>Array(n).fill(0)),
 halfFlags:Array(r).fill(null).map(()=>Array(n).fill(false)),
 halfBefore:Array(r).fill(null).map(()=>Array(n).fill(0)),
@@ -64,12 +61,10 @@ const [target,setTarget]=useState(null);
 const [result,setResult]=useState([]);
 const [rank,setRank]=useState([]);
 
-/* ========= 自動保存 ========= */
-useEffect(()=>{
-save({page,n,r,names,state});
-},[page,n,r,names,state]);
+/* ===== 保存 ===== */
+useEffect(()=>{ save({page,n,r,names,state}); },[page,n,r,names,state]);
 
-/* ========= 復元 ========= */
+/* ===== 復元 ===== */
 useEffect(()=>{
 if(!state)return;
 const i=state.round-1;
@@ -79,36 +74,32 @@ setDobon(state.roundDobonIdx[i]||[]);
 setTarget(state.roundTargetIdx[i]??null);
 },[state?.round]);
 
-const invalidate=()=>setState(prev=>({...prev,confirmed:false}));
+const invalidate=()=>setState(p=>({...p,confirmed:false}));
 
-/* ========= 同一禁止 ========= */
+/* ===== 選択 ===== */
 const toggleDobon=(i)=>{
 if(target===i)return;
-
-setDobon(dobon.includes(i)
-? dobon.filter(v=>v!==i)
-: [...dobon,i]);
-
+setDobon(dobon.includes(i)?dobon.filter(v=>v!==i):[...dobon,i]);
 invalidate();
 };
 
 const toggleTarget=(i)=>{
-if(dobon.includes(i)) return;
-
-setTarget(target===i ? null : i);
-
+if(dobon.includes(i))return;
+setTarget(target===i?null:i);
 invalidate();
 };
 
-/* ========= 計算 ========= */
+/* ===== 計算 ===== */
 const confirm=()=>{
+if(type==="選択")return;
+
 const i=state.round-1;
 let score=Array(state.n).fill(0);
 
 if(type==="ドボン"||type==="ドボン返し"){
 if(dobon.length===0||target===null)return;
 }
-if(type==="ウルトラドボン" && dobon.length===0)return;
+if(type==="ウルトラドボン"&&dobon.length===0)return;
 
 switch(type){
 
@@ -119,14 +110,14 @@ break;
 case "ドボン":
 for(let j=0;j<state.n;j++){
 if(dobon.includes(j)) score[j]=-50;
-else if(target===j) score[j]=base[j]+50*dobon.length;
+else if(j===target) score[j]=base[j]+50*dobon.length;
 else score[j]=base[j];
 }
 break;
 
 case "ドボン返し":
 for(let j=0;j<state.n;j++){
-if(target===j) score[j]=-100*dobon.length;
+if(j===target) score[j]=-100*dobon.length;
 else if(dobon.includes(j)) score[j]=base[j]+100;
 else score[j]=base[j];
 }
@@ -134,11 +125,8 @@ break;
 
 case "ウルトラドボン":
 for(let j=0;j<state.n;j++){
-if(dobon.includes(j)){
-score[j]=-50*(state.n-dobon.length);
-}else{
-score[j]=base[j]+50;
-}
+if(dobon.includes(j)) score[j]=-50*(state.n-dobon.length);
+else score[j]=base[j]+50;
 }
 break;
 }
@@ -188,26 +176,45 @@ confirmed:true
 }));
 };
 
-/* ========= 共有 ========= */
-const share = async () => {
-  const sorted=[...state.scores].map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
+/* ===== 共有 ===== */
+const share=async ()=>{
+const sorted=[...state.scores].map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
 
-  let txt="【ドボン結果】\n";
+let txt="【ドボン結果】\n";
+sorted.forEach((x,i)=>{
+txt+=`${i+1}位 ${state.names[x.i]} : ${x.v}\n`;
+});
 
-  sorted.forEach((x,i)=>{
-    txt+=`${i+1}位 ${state.names[x.i]} : ${x.v}\n`;
-  });
-
-  if(navigator.share){
-    await navigator.share({text:txt});
-  }else{
-    await navigator.clipboard.writeText(txt);
-    alert("コピーしました");
-  }
+if(navigator.share){
+await navigator.share({text:txt});
+}else{
+await navigator.clipboard.writeText(txt);
+alert("コピーしました");
+}
 };
 
+/* ===== START ===== */
+if(page==="start"){
+return(
+<div className="flex h-screen items-center justify-center">
+<div className="w-80">
 
-/* ========= ルール ========= */
+<div className={panel}>
+<h1 className="text-xl font-bold mb-3">ドボン計算</h1>
+
+<button className="w-full bg-black text-white p-3 mb-2"
+onClick={()=>setPage("init")}>開始</button>
+
+<button className="w-full bg-gray-300 p-2"
+onClick={()=>setPage("rule")}>ルール</button>
+</div>
+
+</div>
+</div>
+);
+}
+
+/* ===== RULE ===== */
 if(page==="rule"){
 return(
 <div className="p-4 max-w-md mx-auto">
@@ -242,28 +249,7 @@ onClick={()=>setPage("start")}>戻る</button>
 );
 }
 
-/* ========= START ========= */
-if(page==="start"){
-return(
-<div className="flex h-screen items-center justify-center">
-<div className="w-80">
-
-<div className={panel}>
-<h1 className="text-xl font-bold mb-3">ドボン計算</h1>
-
-<button className="w-full bg-black text-white p-3 mb-2"
-onClick={()=>setPage("init")}>開始</button>
-
-<button className="w-full bg-gray-300 p-2"
-onClick={()=>setPage("rule")}>ルール</button>
-</div>
-
-</div>
-</div>
-);
-}
-
-/* ========= INIT ========= */
+/* ===== INIT ===== */
 if(page==="init"){
 return(
 <div className="p-4 max-w-md mx-auto">
@@ -312,7 +298,7 @@ setPage("game");
 );
 }
 
-/* ========= RESULT ========= */
+/* ===== RESULT ===== */
 if(page==="result"){
 const sorted=[...state.scores].map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
 
@@ -351,7 +337,7 @@ onClick={()=>setPage("init")}>設定変更</button>
 );
 }
 
-/* ========= GAME ========= */
+/* ===== GAME ===== */
 return(
 <div className="p-4 max-w-4xl mx-auto">
 
@@ -389,6 +375,7 @@ onChange={()=>toggleDobon(i)}/> {n}
 {type==="ドボン" && "ドボンされた人"}
 {type==="ドボン返し" && "ドボン返しした人"}
 </div>
+
 {state.names.map((n,i)=>(
 <label key={i} className={`block ${dobon.includes(i)?"text-gray-400":""}`}>
 <input type="checkbox"
@@ -424,9 +411,11 @@ const disabled =
 (type==="ドボン返し" && target===i);
 
 return(
-<input key={i} type="number"
+<div key={i} className="flex items-center mb-2 gap-2">
+<div className="w-24">{n}</div>
+<input type="number"
 disabled={disabled}
-className={`border p-2 w-full mb-2 ${disabled?"bg-gray-200":""}`}
+className={`border p-2 flex-1 ${disabled?"bg-gray-200":""}`}
 value={base[i]||0}
 onChange={e=>{
 const arr=[...base];
@@ -434,6 +423,7 @@ arr[i]=Number(e.target.value);
 setBase(arr);
 invalidate();
 }}/>
+</div>
 );
 })}
 </div>
@@ -449,9 +439,9 @@ invalidate();
 {rank.map((r,i)=><div key={i}>{r}</div>)}
 </div>
 
+{/* 履歴 */}
 <div className={panel}>
 <div className={title}>履歴</div>
-
 <table className="w-full text-sm text-center">
 <thead>
 <tr>
@@ -459,90 +449,63 @@ invalidate();
 {state.names.map((n,i)=><th key={i}>{n}</th>)}
 </tr>
 </thead>
-
 <tbody>
 {state.roundScores.map((row,ri)=>(
 <tr key={ri}>
 <td>R{ri+1}</td>
-
 {row.map((v,i)=>{
 const isHalf=state.halfFlags[ri][i];
 const isDobon=state.roundDobonIdx[ri].includes(i);
-const isTarget=state.roundTargetIdx[ri].includes(i);
+const isTarget=state.roundTargetIdx[ri]===i;
 
 let color="text-black";
 if(state.roundType[ri]==="巣上がり") color="text-green-500";
 else if(isDobon) color="text-red-500";
 else if(isTarget) color="text-blue-500";
 
-return(
-<td key={i} className={color}>
-{v}{isHalf?"★":""}
-</td>
-);
+return <td key={i} className={color}>{v}{isHalf?"★":""}</td>
 })}
-
 </tr>
 ))}
 </tbody>
 </table>
 </div>
 
-
-{/* ===== 操作ボタン ===== */}
+{/* ボタン */}
 <div className="flex gap-2 mt-2">
 
-<button
-className="text-xs bg-gray-300 px-2 py-1 rounded"
-onClick={()=>setPage("init")}
->
+<button className="text-xs bg-gray-300 px-2 py-1 rounded"
+onClick={()=>setPage("init")}>設定</button>
 
-
-設定
-</button>
-
-<button
-className={`text-xs px-2 py-1 rounded ${
+<button className={`text-xs px-2 py-1 rounded ${
 state.round>1 ? "bg-gray-300" : "bg-gray-200 text-gray-400"
 }`}
 onClick={()=>{
 if(state.round>1){
-setState(prev=>({...prev,round:prev.round-1,confirmed:false}));
+setState(p=>({...p,round:p.round-1,confirmed:false}));
 }
-}}
->
-戻る
-</button>
+}}>戻る</button>
 
 <button
 className={`flex-1 p-2 rounded text-white ${
-(type==="選択" || state.confirmed)
+(type==="選択"||state.confirmed)
 ? "bg-gray-400"
 : "bg-green-500"
 }`}
-onClick={confirm}
->
-確定
-</button>
+onClick={confirm}>確定</button>
 
 <button
 className={`flex-1 p-2 rounded text-white ${
-state.confirmed ? "bg-blue-500" : "bg-gray-400"
+state.confirmed?"bg-blue-500":"bg-gray-400"
 }`}
 onClick={()=>{
-if(!state.confirmed) return;
-
-if(state.round>=state.maxRound){
-setPage("result");
-}else{
-setState(prev=>({...prev,round:prev.round+1,confirmed:false}));
-}
-}}
->
-次へ
-</button>
+if(!state.confirmed)return;
+if(state.round>=state.maxRound)setPage("result");
+else setState(p=>({...p,round:p.round+1,confirmed:false}));
+}}>次へ</button>
 
 </div>
+
 </div>
 );
 }
