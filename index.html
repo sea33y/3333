@@ -189,21 +189,23 @@ confirmed:true
 };
 
 /* ========= 共有 ========= */
-const sorted=[...state.scores].map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
+const share = async () => {
+  const sorted=[...state.scores].map((v,i)=>({v,i})).sort((a,b)=>a.v-b.v);
 
-let txt="【ドボン結果】\n";
+  let txt="【ドボン結果】\n";
 
-sorted.forEach((x,i)=>{
-txt+=`${i+1}位 ${state.names[x.i]} : ${x.v}\n`;
-});
+  sorted.forEach((x,i)=>{
+    txt+=`${i+1}位 ${state.names[x.i]} : ${x.v}\n`;
+  });
 
-if(navigator.share){
-await navigator.share({text:txt});
-}else{
-await navigator.clipboard.writeText(txt);
-alert("コピーしました");
-}
+  if(navigator.share){
+    await navigator.share({text:txt});
+  }else{
+    await navigator.clipboard.writeText(txt);
+    alert("コピーしました");
+  }
 };
+
 
 /* ========= ルール ========= */
 if(page==="rule"){
@@ -549,4 +551,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
-
